@@ -1,10 +1,15 @@
-from flask import Flask, redirect, url_for, session
+from flask import Flask, redirect, url_for, session, jsonify
 from authlib.integrations.flask_client import OAuth
 from authlib.common.security import generate_token
+from dotenv import load_dotenv
+from flask_cors import CORS
 import os
+
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+CORS(app)  # Enable CORS for all routes
 
 
 oauth = OAuth(app)
@@ -53,4 +58,4 @@ def logout():
     return redirect('/')
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    app.run(debug=True, host='0.0.0.0', port=9000)
