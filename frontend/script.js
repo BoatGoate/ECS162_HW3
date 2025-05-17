@@ -185,6 +185,18 @@ function checkScroll() {
 document.addEventListener('DOMContentLoaded', () => {
     fetchNYTData();
     window.addEventListener('scroll', checkScroll);
+    
+    // User info fetch (to check if logged in)
+    const loginButton = document.getElementById('login-button');
+    fetch('/api/user')
+        .then(response => response.json())
+        .then(data => {
+            if (data.username) {
+                loginButton.textContent = `Signed in as ${data.username}`;
+                loginButton.onclick = null; // Disable redirect to /login
+            }
+        })
+        .catch(error => console.error('Error fetching user info:', error));
 });
 
 if (typeof module !== 'undefined' && module.exports) {

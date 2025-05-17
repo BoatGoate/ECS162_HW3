@@ -1,22 +1,10 @@
 services:
-  frontend:
-    image: node:18
-    working_dir: /frontend
-    volumes:
-      - ./frontend:/frontend
-    ports:
-      - "5173:5173"  # Vite (SvelteKit) dev server default port
-    depends_on:
-      - backend
-    command: sh -c "npm install && npm run dev -- --host"
-    env_file:
-      - .env
-      - .env.dev
   backend:
     image: python:3.10-slim
     working_dir: /app
     volumes:
       - ./backend:/app
+      - ./frontend:/frontend  # Mount the frontend folder to serve static files
     env_file:
       - .env
       - .env.dev

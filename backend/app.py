@@ -1,4 +1,4 @@
-from flask import Flask, redirect, url_for, session, jsonify
+from flask import Flask, redirect, url_for, session, jsonify, send_file, send_from_directory
 from authlib.integrations.flask_client import OAuth
 from authlib.common.security import generate_token
 from dotenv import load_dotenv
@@ -31,11 +31,10 @@ oauth.register(
 )
 
 @app.route('/')
-def home():
-    user = session.get('user')
-    if user:
-        return f"<h2>Logged in as {user['email']}</h2><a href='/logout'>Logout</a>"
-    return '<a href="/login">Login with Dex</a>'
+def serve_index():
+    # Serve the index.html file from the frontend folder
+    frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend'))
+    return send_from_directory(frontend_path, 'index.html')
 
 @app.route('/login')
 def login():
@@ -48,9 +47,14 @@ def authorize():
     token = oauth.flask_app.authorize_access_token()
     nonce = session.get('nonce')
 
-    user_info = oauth.flask_app.parse_id_token(token, nonce=nonce)  # or use .get('userinfo').json()
-    session['user'] = user_info
-    return redirect('/')
+    user_info = oauth.flask_app.parse_id_token(token, nonce=nonce)
+    session['user'] = {
+        "username": user_info.get("preferred_username", user_info.get("email")),
+        "email": user_info.get("email")
+    }
+
+    # Redirect to the main page (index.html)
+    return redirect('/app')
 
 @app.route('/logout')
 def logout():
@@ -63,6 +67,25 @@ def get_api_key():
     if not nyt_api_key:
         return jsonify({"error": "API key not found"}), 500
     return jsonify({"key": nyt_api_key})
+
+@app.route('/api/user')
+def get_user_info():
+    user = session.get('user')
+    if user:
+        return jsonify({"username": user.get("username")})
+    return jsonify({"username": None})
+
+@app.route('/app')
+def serve_app():
+    # Serve the index.html file from the frontend folder
+    frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend'))
+    return send_from_directory(frontend_path, 'index.html')
+
+@app.route('/<path:filename>')
+def serve_files(filename):
+    frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend'))
+    return send_from_directory(frontend_path, filename)
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8000)
