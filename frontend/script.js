@@ -42,7 +42,7 @@ async function fetchApiKey() {
         const response = await fetch('/api/key');
         if (response.ok) {
             const data = await response.json();
-            return data.apiKey;
+            return data.key;
         } else {
             console.error('Failed to fetch API key:', response.status);
             return null;
