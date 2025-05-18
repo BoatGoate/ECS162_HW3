@@ -53,23 +53,26 @@ def login():
 @app.route('/authorize')
 def authorize():
     try:
-        # No need to check for nonce, just authorize the access token
+        # Get the token
         token = oauth.flask_app.authorize_access_token()
         
-        # The token will be used to get user info
+        # Parse the ID token - this contains user information from Dex
         user_info = oauth.flask_app.parse_id_token(token, nonce=None)
-        
-        # Get user email for a more reliable check
+
+        # Extract email (this is reliable)
         email = user_info.get("email", "")
-        print(f"DEBUG - User email: {email}")
+    
+        username = None
         
-        # Check if user is a moderator by email (more reliable)
+        username = user_info["name"]
+
+        
+        # Check if user is a moderator
         is_moderator = email == "moderator@hw3.com"
-        print(f"DEBUG - Is moderator (by email): {is_moderator}")
         
         # Store user information in session
         session['user'] = {
-            "username": user_info.get("username", user_info.get("email")),
+            "username": username,
             "email": email,
             "user_id": user_info.get("sub", user_info.get("uid", user_info.get("userID", "unknown"))),
             "is_moderator": is_moderator
@@ -424,7 +427,7 @@ def redact_comment(comment_id):
         return jsonify({'message': 'Comment redacted successfully'}), 200
     return jsonify({'error': 'Comment not found'}), 404
 
-@app.route('/api/comments/<comment_id>/replies/<reply_id>/redact', methods=['PUT'])
+@app.route('/api/comments/<comment_id>/replies/<reply_id>', methods=['PUT'])
 def redact_reply(comment_id, reply_id):
     """Redact a reply (moderators only)"""
     user = session.get('user')
