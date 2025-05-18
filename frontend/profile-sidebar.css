@@ -121,7 +121,7 @@
     background-color: rgba(10, 70, 104, 0.863);
 }
 
-@media screen and (max-width: 480px) {
+@media screen and (max-width: 486px) {
     .profile-sidebar {
         width: 100%;
     }

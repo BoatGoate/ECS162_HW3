@@ -281,7 +281,7 @@ async function openCommentSidebar(articleTitle, commentCount) {
         const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(articleTitle)}`);
         if (countResponse.ok) {
             const data = await countResponse.json();
-            commentCountElem.textContent = data.count;
+            commentCountElem.textContent = `(${data.count})`;
         } else {
             // Fall back to local count if server fails
             commentCountElem.textContent = commentCount;
@@ -304,6 +304,7 @@ async function openCommentSidebar(articleTitle, commentCount) {
 // Fetch comments from server
 async function fetchComments(articleTitle) {
     try {
+        console.log(`YUHHHH /api/comments/${encodeURIComponent(articleTitle)}`);
         const response = await fetch(`/api/comments/${encodeURIComponent(articleTitle)}`);
         
         if (response.ok) {
@@ -447,7 +448,7 @@ function toggleReplyForm(commentId) {
 // Submit a reply to a comment
 async function submitReply(parentId, text) {
     if (!text.trim()) return;
-    
+      // Get the exact article title currently displayed in the sidebar
     const articleTitle = document.getElementById('comment-article-title').textContent;
     
     try {
@@ -463,13 +464,13 @@ async function submitReply(parentId, text) {
           if (response.ok) {
             const result = await response.json();
             console.log('Reply added successfully:', result);
-            
-            // Refresh comments to show the new reply
-            await fetchComments(articleTitle);
+              // Refresh comments to show the new reply - always get the current article title
+            const currentArticleTitle = document.getElementById('comment-article-title').textContent;
+            await fetchComments(currentArticleTitle);
             
             // Update comment count by fetching from the server
             try {
-                const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(articleTitle)}`);
+                const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(currentArticleTitle)}`);
                 if (countResponse.ok) {
                     const data = await countResponse.json();
                     const commentCountElem = document.getElementById('comment-count');
@@ -552,26 +553,28 @@ async function submitComment(articleTitle, text) {
     if (!text.trim()) return;
     
     try {
+        // Always get the current article title from the DOM element to ensure consistency
+        const currentArticleTitle = document.getElementById('comment-article-title').textContent;
+        
         const response = await fetch('/api/comments', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                articleTitle: articleTitle,
+            },            body: JSON.stringify({
+                articleTitle: encodeURIComponent(currentArticleTitle),
                 text: text
             })
         });
         
         if (response.ok) {
-            const result = await response.json();
-            console.log('Comment added successfully:', result);
+            const result = await response.json();            console.log('Comment added successfully:', result);
               // Refresh comments - this will update the comment list
-            await fetchComments(articleTitle);
+            const currentArticleTitle = document.getElementById('comment-article-title').textContent;
+            await fetchComments(currentArticleTitle);
             
             // Update comment count by fetching from the server
             try {
-                const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(articleTitle)}`);
+                const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(currentArticleTitle)}`);
                 if (countResponse.ok) {
                     const data = await countResponse.json();
                     const commentCountElem = document.getElementById('comment-count');

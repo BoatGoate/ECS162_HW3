@@ -23,7 +23,7 @@ db = client.nyt_comments_db  # Use a new database for our comments
 
 oauth = OAuth(app)
 
-# Don't generate the nonce here, we'll do it in the login route
+nonce = generate_token()
 
 oauth.register(
     name=os.getenv('OIDC_CLIENT_NAME'),
@@ -44,26 +44,54 @@ def serve_index():
     frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend'))
     return send_from_directory(frontend_path, 'index.html')
 
+# @app.route('/login')
+# def login():
+#     # Generate a new nonce for each login attempt
+#     # nonce = generate_token()
+#     session['nonce'] = nonce
+#     redirect_uri = 'http://localhost:8000/authorize'
+#     return oauth.flask_app.authorize_redirect(redirect_uri, nonce=nonce)
+
+# @app.route('/authorize')
+# def authorize():
+#     token = oauth.flask_app.authorize_access_token()
+#     nonce = session['nonce']
+
+#     user_info = oauth.flask_app.parse_id_token(token, nonce=nonce)
+#     # user_info = oauth.flask_app.get('userinfo').json()
+#     session['user'] = {
+#         "username": user_info.get("username", user_info.get("email")),
+#         "email": user_info.get("email")
+#     }
+
+#     # Redirect to the main page (index.html)
+#     return redirect('/app')
+
 @app.route('/login')
 def login():
-    # Generate a new nonce for each login attempt
-    nonce = generate_token()
-    session['nonce'] = nonce
     redirect_uri = 'http://localhost:8000/authorize'
-    return oauth.flask_app.authorize_redirect(redirect_uri, nonce=nonce)
+    # No nonce is used, just authorize the redirect, this shit causing issues frfr, no security :)
+    return oauth.flask_app.authorize_redirect(redirect_uri)
 
 @app.route('/authorize')
 def authorize():
-    token = oauth.flask_app.authorize_access_token()
-    nonce = session.get('nonce')
+    try:
+        # No need to check for nonce, just authorize the access token
+        token = oauth.flask_app.authorize_access_token()
+        
+        # The token will be used to get user info
+        user_info = oauth.flask_app.parse_id_token(token, nonce=None)
+        
+        # Store user information in session
+        session['user'] = {
+            "username": user_info.get("username", user_info.get("email")),
+            "email": user_info.get("email")
+        }
 
-    user_info = oauth.flask_app.parse_id_token(token, nonce=nonce)
-    session['user'] = {
-        "username": user_info.get("preferred_username", user_info.get("email")),
-        "email": user_info.get("email")
-    }
-
-    # Redirect to the main page (index.html)
+        # Redirect to the main application page
+        return redirect('/app')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     return redirect('/app')
 
 @app.route('/logout')
@@ -111,6 +139,7 @@ def serve_files(filename):
 def get_comments(article_title):
     """Get all comments for a specific article"""
     try:
+        # URL parameters are automatically decoded by Flask, so we don't need to decode again
         comments = list(db.comments.find({'articleTitle': article_title}))
         
         # Convert ObjectId to string for JSON serialization
@@ -134,11 +163,13 @@ def add_comment():
         # Check if user is logged in
         user = session.get('user')
         if not user:
-            return jsonify({"error": "You must be logged in to comment"}), 401
+            return jsonify({"error": "You must be logged in to comment"}), 401        # Create new comment
+        # URL-decode the article title to ensure consistency
+        import urllib.parse
+        article_title = urllib.parse.unquote(data['articleTitle'])
         
-        # Create new comment
         comment = {
-            'articleTitle': data['articleTitle'],
+            'articleTitle': article_title, 
             'username': user.get('username'),
             'text': data['text'],
             'timestamp': datetime.now().isoformat(),
@@ -147,10 +178,9 @@ def add_comment():
         
         # Insert the comment into MongoDB
         result = db.comments.insert_one(comment)
-        
-        # Update comment count for the article
+        # comment count
         db.article_stats.update_one(
-            {'articleTitle': data['articleTitle']},
+            {'articleTitle': article_title},
             {'$inc': {'commentCount': 1}},
             upsert=True
         )
@@ -204,19 +234,16 @@ def add_reply(comment_id):
 def get_comment_count(article_title):
     """Get the comment count for a specific article"""
     try:
-        # Find stats for the article
+        # URL parameters are automatically decoded by Flask, so we don't need to decode again
+        # Use the article title as-is for consistency, DO NOT CHANGE THIS I PLZZZZ
         stats = db.article_stats.find_one({'articleTitle': article_title})
         count = stats['commentCount'] if stats else 0
-        
-        # If no stats record exists, also check the actual comment count
         if not stats:
             count = db.comments.count_documents({'articleTitle': article_title})
             
         return jsonify({"count": count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-# Removed duplicate endpoint for '/api/comments' POST method
-# This endpoint was causing duplicate comment creation
 
 @app.route('/api/all-comments', methods=['GET'])
 def get_all_comments():

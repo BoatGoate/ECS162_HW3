@@ -54,7 +54,7 @@
 }
 
 .comment-textarea {
-    width: 100%;
+    width: 95%;
     min-height: 100px;
     padding: 10px;
     border: 1px solid #ccc;
@@ -186,17 +186,20 @@
     display: flex;
     align-items: center;
     cursor: pointer;
+    background-color: rgb(240, 240, 240);
+    padding: 5px;
+    border-radius: 8px;
 }
 
 .comment-tag i {
     font-size: 14px;
-    margin-right: 2px;
+    margin-right: 3px;
 }
 
 .article-footer {
     display: flex;
     flex-direction: row;
-    justify-content: flex-start;
+    justify-content: space-between; /* Align items to the left flex-start */
     align-items: center;
 }
 
