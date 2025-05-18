@@ -235,6 +235,52 @@ def add_reply(comment_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/comments/<comment_id>/replies/<reply_id>/replies', methods=['POST'])
+def add_nested_reply(comment_id, reply_id):
+    """Add a nested reply (reply to a reply)"""
+    try:
+        data = request.json
+        
+        # Check if user is logged in
+        user = session.get('user')
+        if not user:
+            return jsonify({"error": "You must be logged in to reply"}), 401
+        
+        # Create new nested reply
+        nested_reply = {
+            'username': user.get('username'),
+            'text': data['text'],
+            'timestamp': datetime.now().isoformat(),
+            '_id': ObjectId(),
+            'parent_reply_id': reply_id  # Reference to the parent reply
+        }
+        
+        # Find the parent comment
+        comment = db.comments.find_one({'_id': ObjectId(comment_id)})
+        if not comment:
+            return jsonify({"error": "Parent comment not found"}), 404
+        
+        # Add the nested reply to the replies array
+        result = db.comments.update_one(
+            {'_id': ObjectId(comment_id)},
+            {'$push': {'replies': nested_reply}}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({"error": "Failed to add nested reply"}), 500
+        
+        # Update comment count for the article (nested replies also count)
+        if 'articleTitle' in comment:
+            db.article_stats.update_one(
+                {'articleTitle': comment['articleTitle']},
+                {'$inc': {'commentCount': 1}},
+                upsert=True
+            )
+        
+        return jsonify({"id": str(nested_reply['_id']), "success": True}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/comment-count/<article_title>', methods=['GET'])
 def get_comment_count(article_title):
     """Get the comment count for a specific article"""
@@ -317,16 +363,13 @@ def update_comment(comment_id):
 
 @app.route('/api/comments/<comment_id>/replies/<reply_id>', methods=['DELETE'])
 def delete_reply(comment_id, reply_id):
-    # Check if user is logged in
     user = session.get('user')
     if not user:
         return jsonify({"error": "You must be logged in to delete replies"}), 401
-    
-    # Check if user is a moderator by email (more reliable)
     email = user.get("email", "")
     is_moderator = email == "moderator@hw3.com" or user.get('is_moderator', False)
     
-    # Add debug logging
+    # DEBUG
     print(f"DEBUG - Delete reply request from: {email}, is_moderator: {is_moderator}")
     
     # Check if user is a moderator
@@ -384,12 +427,10 @@ def redact_comment(comment_id):
 @app.route('/api/comments/<comment_id>/replies/<reply_id>/redact', methods=['PUT'])
 def redact_reply(comment_id, reply_id):
     """Redact a reply (moderators only)"""
-    # Check if user is logged in
     user = session.get('user')
     if not user:
         return jsonify({"error": "You must be logged in to redact replies"}), 401
     
-    # Check if user is a moderator
     email = user.get("email", "")
     is_moderator = email == "moderator@hw3.com" or user.get('is_moderator', False)
     
@@ -413,19 +454,16 @@ def redact_reply(comment_id, reply_id):
 @app.route('/api/comments/<comment_id>/partial-redact', methods=['PUT'])
 def partial_redact_comment(comment_id):
     """Partially redact a comment (moderators only)"""
-    # Check if user is logged in
     user = session.get('user')
     if not user:
         return jsonify({"error": "You must be logged in to redact comments"}), 401
     
-    # Check if user is a moderator
     email = user.get("email", "")
     is_moderator = email == "moderator@hw3.com" or user.get('is_moderator', False)
     
     if not is_moderator:
         return jsonify({"error": "Only moderators can redact comments"}), 403
-    
-    # Get the redacted text from request
+
     data = request.json
     if not data or 'redactedText' not in data:
         return jsonify({'error': 'No redacted text provided'}), 400

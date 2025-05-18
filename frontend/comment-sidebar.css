@@ -151,8 +151,9 @@
 
 .comment-actions {
     display: flex;
-    justify-content: flex-start;
-    padding-left: 40px;
+    flex-direction: row;
+    align-items: center;
+    margin-top: 5px;
 }
 
 .reply-button {
@@ -160,13 +161,32 @@
     border: none;
     color: rgba(11, 84, 127, 0.753);
     font-family: Helvetica, Arial, sans-serif;
-    font-size: 12px;
+    font-size: 13px;
+    font-weight: bold;
     cursor: pointer;
     padding: 0;
 }
 
 .reply-button:hover {
     text-decoration: underline;
+}
+
+.delete-button {
+    margin-left: auto; /* Push to far right */
+    background: none;
+    border: none;
+    color: #717171;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.redact-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    margin-right: 10px;
+    color: #717171; /* Orange color for redact */
 }
 
 .replies {
@@ -232,7 +252,7 @@
 .delete-button {
     background: none;
     border: none;
-    color: #d9534f;
+    color: #717171;
     cursor: pointer;
     font-size: 14px;
     margin-left: 10px;
@@ -257,7 +277,7 @@
 .redact-button {
     background: none;
     border: none;
-    color: #ff9800; /* Orange color for redact */
+    color: #717171;
     cursor: pointer;
     font-size: 14px;
     margin-left: 10px;
@@ -308,6 +328,28 @@
 
 .redact-submit-btn:hover {
     background-color: #e68a00;
+}
+
+/* Styling for nested replies */
+.nested-reply {
+    margin-left: 20px;
+    border-left: 2px solid #e0e0e0;
+    padding-left: 10px;
+}
+
+/* Add visual indicators for reply relationships */
+.nested-reply .comment-avatar {
+    position: relative;
+}
+
+.nested-reply .comment-avatar::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 10px;
+    width: 8px;
+    height: 2px;
+    background-color: #e0e0e0;
 }
 
 

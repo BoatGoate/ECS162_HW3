@@ -398,38 +398,24 @@ function createCommentElement(comment, isReply = false, parentId = null) {
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'comment-actions';
     
+    // 1. Reply button (always first)
     const replyButton = document.createElement('button');
     replyButton.className = 'reply-button';
     replyButton.textContent = 'Reply';
     replyButton.addEventListener('click', () => {
-        toggleReplyForm(comment._id || comment.id);
+        if (isReply) {
+            // This is a reply to a reply
+            toggleReplyForm(comment._id || comment.id, true, parentId);
+        } else {
+            // This is a reply to a comment
+            toggleReplyForm(comment._id || comment.id);
+        }
     });
     
     actionsDiv.appendChild(replyButton);
     
-    // Add delete button for moderators
+    // 2. Add redact button for moderators (second position)
     if (isUserModerator) {
-        const deleteButton = document.createElement('button');
-        deleteButton.className = 'delete-button';
-        deleteButton.textContent = 'Delete';
-        
-        // Use different delete functions for comments and replies
-        if (isReply && parentId) {
-            deleteButton.addEventListener('click', () => {
-                deleteReply(parentId, comment._id || comment.id);
-            });
-        } else {
-            deleteButton.addEventListener('click', () => {
-                deleteComment(comment._id || comment.id);
-            });
-        }
-        
-        actionsDiv.appendChild(deleteButton);
-    }
-    
-    // Add moderator actions
-    if (isUserModerator) {
-        // Add redact button
         const redactButton = document.createElement('button');
         redactButton.className = 'redact-button';
         redactButton.textContent = 'Redact';
@@ -446,6 +432,27 @@ function createCommentElement(comment, isReply = false, parentId = null) {
         }
         
         actionsDiv.appendChild(redactButton);
+    }
+    
+    // 3. Add delete button for moderators (third position - far right)
+    if (isUserModerator) {
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-button';
+        deleteButton.textContent = 'Delete';
+        deleteButton.style.marginLeft = 'auto'; // Push to far right
+        
+        // Use different delete functions for comments and replies
+        if (isReply && parentId) {
+            deleteButton.addEventListener('click', () => {
+                deleteReply(parentId, comment._id || comment.id);
+            });
+        } else {
+            deleteButton.addEventListener('click', () => {
+                deleteComment(comment._id || comment.id);
+            });
+        }
+        
+        actionsDiv.appendChild(deleteButton);
     }
     
     commentDiv.appendChild(actionsDiv);
@@ -474,7 +481,17 @@ function createCommentElement(comment, isReply = false, parentId = null) {
     submitButton.className = 'comment-submit';
     submitButton.textContent = 'Reply';
     submitButton.addEventListener('click', () => {
-        submitReply(commentId, replyTextarea.value);
+        const form = replyFormDiv;
+        const isReplyToReply = form.dataset.isReplyToReply === 'true';
+        const parentCommentId = form.dataset.parentCommentId;
+        
+        if (isReplyToReply && parentCommentId) {
+            // Submit as a nested reply
+            submitNestedReply(parentCommentId, commentId, replyTextarea.value);
+        } else {
+            // Submit as a regular reply
+            submitReply(commentId, replyTextarea.value);
+        }
     });
     
     buttonDiv.appendChild(cancelButton);
@@ -490,8 +507,20 @@ function createCommentElement(comment, isReply = false, parentId = null) {
         repliesDiv.className = 'replies';
         
         comment.replies.forEach(reply => {
-            // Pass the parent comment ID to handle reply deletion
-            repliesDiv.appendChild(createCommentElement(reply, true, comment._id || comment.id));
+            // Check if this is a nested reply
+            const isNested = reply.parent_reply_id !== undefined;
+            let replyElement;
+            
+            if (isNested) {
+                // This is a nested reply
+                replyElement = createCommentElement(reply, true, comment._id || comment.id);
+                replyElement.classList.add('nested-reply');
+            } else {
+                // This is a regular reply
+                replyElement = createCommentElement(reply, true, comment._id || comment.id);
+            }
+            
+            repliesDiv.appendChild(replyElement);
         });
         
         commentDiv.appendChild(repliesDiv);
@@ -528,13 +557,23 @@ function processRedactedText(originalText, editedText) {
 }
 
 // Toggle reply form visibility
-function toggleReplyForm(commentId) {
+function toggleReplyForm(commentId, isReplyToReply = false, parentCommentId = null) {
     const replyForm = document.getElementById(`reply-form-${commentId}`);
     
     if (replyForm.style.display === 'block') {
         replyForm.style.display = 'none';
     } else {
         replyForm.style.display = 'block';
+        
+        // Store whether this is a reply to a reply
+        replyForm.dataset.isReplyToReply = isReplyToReply;
+        if (parentCommentId) {
+            replyForm.dataset.parentCommentId = parentCommentId;
+        }
+        
+        // Focus on the textarea
+        const textarea = replyForm.querySelector('.reply-textarea');
+        textarea.focus();
     }
 }
 
@@ -567,7 +606,7 @@ async function submitReply(parentId, text) {
                 if (countResponse.ok) {
                     const data = await countResponse.json();
                     const commentCountElem = document.getElementById('comment-count');
-                    commentCountElem.textContent = data.count;
+                    commentCountElem.textContent = `(${data.count})`;
                 }
             } catch (error) {
                 console.error('Error updating comment count:', error);
@@ -589,6 +628,61 @@ async function submitReply(parentId, text) {
         }
     } catch (error) {
         console.error('Error submitting reply:', error);
+        alert('Error adding reply. Please check your connection.');
+    }
+}
+
+// Add a new function to handle nested replies
+async function submitNestedReply(parentCommentId, replyId, text) {
+    if (!text.trim()) return;
+    
+    try {
+        const response = await fetch(`/api/comments/${parentCommentId}/replies/${replyId}/replies`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                text: text
+            })
+        });
+        
+        if (response.ok) {
+            // Refresh comments to show the new nested reply
+            const currentArticleTitle = document.getElementById('comment-article-title').textContent;
+            await fetchComments(currentArticleTitle);
+            
+            // Hide the reply form
+            const replyForm = document.getElementById(`reply-form-${replyId}`);
+            if (replyForm) {
+                replyForm.style.display = 'none';
+            }
+            
+            // Update comment count
+            try {
+                const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(currentArticleTitle)}`);
+                if (countResponse.ok) {
+                    const data = await countResponse.json();
+                    const commentCountElem = document.getElementById('comment-count');
+                    commentCountElem.textContent = `(${data.count})`;
+                    
+                    // Also update article grid count
+                    updateArticleCommentCounts(currentArticleTitle, data.count);
+                }
+            } catch (error) {
+                console.error('Error updating comment count:', error);
+            }
+        } else {
+            if (response.status === 401) {
+                alert('Please log in to reply');
+                window.location.href = '/login';
+            } else {
+                console.error('Failed to submit nested reply:', response.status);
+                alert('Failed to add reply. Please try again.');
+            }
+        }
+    } catch (error) {
+        console.error('Error submitting nested reply:', error);
         alert('Error adding reply. Please check your connection.');
     }
 }
@@ -673,7 +767,7 @@ async function submitComment(articleTitle, text) {
                 if (countResponse.ok) {
                     const data = await countResponse.json();
                     const commentCountElem = document.getElementById('comment-count');
-                    commentCountElem.textContent = data.count;
+                    commentCountElem.textContent = `(${data.count})`;
                 }
             } catch (error) {
                 console.error('Error updating comment count:', error);
@@ -716,10 +810,8 @@ async function deleteComment(commentId) {
                 commentElement.classList.add('removed');
             }
             
-            // Get the current article title to update counts
             const currentArticleTitle = document.getElementById('comment-article-title').textContent;
             
-            // Refresh the comments list
             await fetchComments(currentArticleTitle);
             
             // Update comment count in sidebar
@@ -832,8 +924,7 @@ async function redactComment(commentId) {
     // Submit button processes and saves redacted text
     submitButton.addEventListener('click', async () => {
         const editedText = textarea.value;
-        
-        // Process the edited text, replacing deleted parts with block characters
+    
         const redactedText = processRedactedText(originalText, editedText);
         
         try {
