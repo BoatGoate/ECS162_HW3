@@ -500,22 +500,18 @@ function createCommentElement(comment, isReply = false, parentId = null) {
     return commentDiv;
 }
 
-// Update this function to correctly handle word deletions
 function processRedactedText(originalText, editedText) {
-    // If texts are identical, no redaction needed
+    //check if similar
     if (originalText === editedText) {
         return originalText;
     }
-    
-    // Split into words and track which original words are present in the edited text
+
     const originalWords = originalText.split(/\s+/);
     const editedWords = editedText.split(/\s+/);
     
-    // Keep track of which original words were found in the edited text
     const keepOriginal = Array(originalWords.length).fill(false);
-    
-    // For each edited word, try to find a match in the original
-    let lastMatchIndex = -1;  // To preserve word order
+
+    let lastMatchIndex = -1;
     
     for (const editedWord of editedWords) {
         for (let i = lastMatchIndex + 1; i < originalWords.length; i++) {
@@ -526,8 +522,6 @@ function processRedactedText(originalText, editedText) {
             }
         }
     }
-    
-    // Build the result based on which words to keep
     return originalWords.map((word, i) => 
         keepOriginal[i] ? word : '█'.repeat(word.length)
     ).join(' ');
