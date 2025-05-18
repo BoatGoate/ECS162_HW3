@@ -28,6 +28,9 @@ let isFetching = false;
 let hasMoreArticles = true;
 const MAX_REQUESTS = 3; // Limit to 3 API requests total (we want to show the footer too)
 
+// Add a global variable to track if the user is a moderator
+let isUserModerator = false;
+
 // Estimate reading time based on word count
 function estimateReadTime(wordCount) {
     // Avg WPM is 225
@@ -106,7 +109,7 @@ async function fetchNYTData(page = 0) { // page is passed to api as well
 }
 
 // Display articles in the grid container
-function displayArticles(articles, clearExisting = false) {
+async function displayArticles(articles, clearExisting = false) {
     const gridContainer = document.querySelector('.grid-container');
     
     // Clear existing content if needed (first page load)
@@ -169,9 +172,23 @@ function displayArticles(articles, clearExisting = false) {
         commentIcon.className = "material-icons";
         commentIcon.textContent = "comment";
         commentTag.appendChild(commentIcon);
-        
-        const commentNumber = generateCommentNumber();
-        commentTag.appendChild(document.createTextNode(` ${commentNumber}`));
+
+        // Initialize commentNumber with a default value
+        let commentNumber = 0;
+
+        try {
+            // Use article.headline.main instead of undefined currentArticleTitle
+            const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(article.headline.main)}`);
+            if (countResponse.ok) {
+                const data = await countResponse.json();
+                commentNumber = data.count;
+                commentTag.appendChild(document.createTextNode(` ${commentNumber}`));
+            }
+        } catch (error) {
+            console.error('Error updating comment count:', error);
+            // Add a default value for errors
+            commentTag.appendChild(document.createTextNode(` 0`));
+        }
         
         // Create a wrapper div for read time and comment tag
         const articleFooter = document.createElement('div');
@@ -183,6 +200,8 @@ function displayArticles(articles, clearExisting = false) {
         // Store article data for comment sidebar
         commentTag.addEventListener('click', () => {
             openCommentSidebar(article.headline.main, commentNumber);
+            console.log("Comment tag clicked, article title:", article.headline.main);
+            console.log("Comment number:", commentNumber);
         });
         
         // Add article to grid
@@ -342,7 +361,9 @@ function displayComments(articleTitle) {
 }
 
 // Create a comment element
-function createCommentElement(comment, isReply = false) {
+function createCommentElement(comment, isReply = false, parentId = null) {
+    console.log("Creating comment element, moderator status:", isUserModerator);
+    
     const commentDiv = document.createElement('div');
     commentDiv.className = 'comment';
     commentDiv.dataset.id = comment._id || comment.id; // MongoDB uses _id
@@ -372,7 +393,8 @@ function createCommentElement(comment, isReply = false) {
     commentText.className = 'comment-text';
     commentText.textContent = comment.text;
     commentDiv.appendChild(commentText);
-      // Comment actions
+    
+    // Comment actions
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'comment-actions';
     
@@ -380,12 +402,55 @@ function createCommentElement(comment, isReply = false) {
     replyButton.className = 'reply-button';
     replyButton.textContent = 'Reply';
     replyButton.addEventListener('click', () => {
-        toggleReplyForm(comment._id || comment.id); // MongoDB uses _id
+        toggleReplyForm(comment._id || comment.id);
     });
     
     actionsDiv.appendChild(replyButton);
+    
+    // Add delete button for moderators
+    if (isUserModerator) {
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-button';
+        deleteButton.textContent = 'Delete';
+        
+        // Use different delete functions for comments and replies
+        if (isReply && parentId) {
+            deleteButton.addEventListener('click', () => {
+                deleteReply(parentId, comment._id || comment.id);
+            });
+        } else {
+            deleteButton.addEventListener('click', () => {
+                deleteComment(comment._id || comment.id);
+            });
+        }
+        
+        actionsDiv.appendChild(deleteButton);
+    }
+    
+    // Add moderator actions
+    if (isUserModerator) {
+        // Add redact button
+        const redactButton = document.createElement('button');
+        redactButton.className = 'redact-button';
+        redactButton.textContent = 'Redact';
+        
+        // Use different redact functions for comments and replies
+        if (isReply && parentId) {
+            redactButton.addEventListener('click', () => {
+                redactReply(parentId, comment._id || comment.id);
+            });
+        } else {
+            redactButton.addEventListener('click', () => {
+                redactComment(comment._id || comment.id);
+            });
+        }
+        
+        actionsDiv.appendChild(redactButton);
+    }
+    
     commentDiv.appendChild(actionsDiv);
-      // Reply form (initially hidden)
+    
+    // Reply form (initially hidden)
     const replyFormDiv = document.createElement('div');
     replyFormDiv.className = 'reply-input-container';
     const commentId = comment._id || comment.id;
@@ -425,13 +490,47 @@ function createCommentElement(comment, isReply = false) {
         repliesDiv.className = 'replies';
         
         comment.replies.forEach(reply => {
-            repliesDiv.appendChild(createCommentElement(reply, true));
+            // Pass the parent comment ID to handle reply deletion
+            repliesDiv.appendChild(createCommentElement(reply, true, comment._id || comment.id));
         });
         
         commentDiv.appendChild(repliesDiv);
     }
     
     return commentDiv;
+}
+
+// Update this function to correctly handle word deletions
+function processRedactedText(originalText, editedText) {
+    // If texts are identical, no redaction needed
+    if (originalText === editedText) {
+        return originalText;
+    }
+    
+    // Split into words and track which original words are present in the edited text
+    const originalWords = originalText.split(/\s+/);
+    const editedWords = editedText.split(/\s+/);
+    
+    // Keep track of which original words were found in the edited text
+    const keepOriginal = Array(originalWords.length).fill(false);
+    
+    // For each edited word, try to find a match in the original
+    let lastMatchIndex = -1;  // To preserve word order
+    
+    for (const editedWord of editedWords) {
+        for (let i = lastMatchIndex + 1; i < originalWords.length; i++) {
+            if (originalWords[i] === editedWord && !keepOriginal[i]) {
+                keepOriginal[i] = true;
+                lastMatchIndex = i;
+                break;
+            }
+        }
+    }
+    
+    // Build the result based on which words to keep
+    return originalWords.map((word, i) => 
+        keepOriginal[i] ? word : '█'.repeat(word.length)
+    ).join(' ');
 }
 
 // Toggle reply form visibility
@@ -560,8 +659,10 @@ async function submitComment(articleTitle, text) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            },            body: JSON.stringify({
-                articleTitle: encodeURIComponent(currentArticleTitle),
+            },
+            body: JSON.stringify({
+                // Don't encode here - the backend will handle it
+                articleTitle: currentArticleTitle, // FIXED: removed encodeURIComponent
                 text: text
             })
         });
@@ -596,6 +697,270 @@ async function submitComment(articleTitle, text) {
         console.error('Error submitting comment:', error);
         alert('Error adding comment. Please check your connection.');
     }
+}
+
+// Delete a comment
+async function deleteComment(commentId) {
+    if (!confirm('Are you sure you want to remove this comment?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/comments/${commentId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            // Update the UI to show the removed message
+            const commentElement = document.querySelector(`.comment[data-id="${commentId}"] .comment-text`);
+            if (commentElement) {
+                commentElement.textContent = "[Comment removed by a moderator]";
+                commentElement.style.color = 'dark gray';
+                commentElement.classList.add('removed');
+            }
+            
+            // Get the current article title to update counts
+            const currentArticleTitle = document.getElementById('comment-article-title').textContent;
+            
+            // Refresh the comments list
+            await fetchComments(currentArticleTitle);
+            
+            // Update comment count in sidebar
+            try {
+                const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(currentArticleTitle)}`);
+                if (countResponse.ok) {
+                    const data = await countResponse.json();
+                    const commentCountElem = document.getElementById('comment-count');
+                    commentCountElem.textContent = `(${data.count})`;
+                    
+                    // Also update article grid count
+                    updateArticleCommentCounts(currentArticleTitle, data.count);
+                }
+            } catch (error) {
+                console.error('Error updating comment count:', error);
+            }
+        } else {
+            // Error handling code...
+        }
+    } catch (error) {
+        console.error('Error removing comment:', error);
+        alert('Error removing comment. Please check your connection.');
+    }
+}
+
+// Add this function to handle reply deletion
+async function deleteReply(commentId, replyId) {
+    if (!confirm('Are you sure you want to remove this reply?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/comments/${commentId}/replies/${replyId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            // Update the UI to show the removed message
+            const replyElement = document.querySelector(`.comment[data-id="${replyId}"] .comment-text`);
+            if (replyElement) {
+                replyElement.textContent = "[Comment removed by a moderator]";  
+                replyElement.style.color = 'dark gray';
+                replyElement.classList.add('removed');
+            }
+        } else {
+            // Error handling remains the same
+            if (response.status === 401) {
+                alert('Please log in to remove replies');
+                window.location.href = '/login';
+            } else if (response.status === 403) {
+                alert('Only moderators can remove replies');
+            } else {
+                console.error('Failed to remove reply:', response.status);
+                alert('Failed to remove reply. Please try again.');
+            }
+        }
+    } catch (error) {
+        console.error('Error removing reply:', error);
+        alert('Error removing reply. Please check your connection.');
+    }
+}
+
+// Redact a comment
+async function redactComment(commentId) {
+    // Get the comment element and text
+    const commentElement = document.querySelector(`.comment[data-id="${commentId}"] .comment-text`);
+    if (!commentElement) return;
+    
+    const originalText = commentElement.textContent;
+    
+    // Replace the text with an editable textarea
+    const textareaContainer = document.createElement('div');
+    textareaContainer.className = 'redact-editor';
+    
+    const textarea = document.createElement('textarea');
+    textarea.className = 'redact-textarea';
+    textarea.value = originalText;
+    textareaContainer.appendChild(textarea);
+    
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'redact-buttons';
+    
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.className = 'redact-cancel-btn';
+    
+    const submitButton = document.createElement('button');
+    submitButton.textContent = 'Submit Redaction';
+    submitButton.className = 'redact-submit-btn';
+    
+    buttonsDiv.appendChild(cancelButton);
+    buttonsDiv.appendChild(submitButton);
+    textareaContainer.appendChild(buttonsDiv);
+    
+    // Replace the comment text with our editor
+    commentElement.innerHTML = '';
+    commentElement.appendChild(textareaContainer);
+    
+    // Focus the textarea
+    textarea.focus();
+    
+    // Cancel button restores original text
+    cancelButton.addEventListener('click', () => {
+        commentElement.textContent = originalText;
+    });
+    
+    // Submit button processes and saves redacted text
+    submitButton.addEventListener('click', async () => {
+        const editedText = textarea.value;
+        
+        // Process the edited text, replacing deleted parts with block characters
+        const redactedText = processRedactedText(originalText, editedText);
+        
+        try {
+            const response = await fetch(`/api/comments/${commentId}/partial-redact`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    redactedText: redactedText
+                })
+            });
+            
+            if (response.ok) {
+                // Update the UI with the redacted text
+                commentElement.textContent = redactedText;
+                commentElement.classList.add('partially-redacted');
+            } else {
+                if (response.status === 401) {
+                    alert('Please log in to redact comments');
+                    window.location.href = '/login';
+                } else if (response.status === 403) {
+                    alert('Only moderators can redact comments');
+                } else {
+                    console.error('Failed to redact comment:', response.status);
+                    alert('Failed to redact comment. Please try again.');
+                    commentElement.textContent = originalText;
+                }
+            }
+        } catch (error) {
+            console.error('Error redacting comment:', error);
+            alert('Error redacting comment. Please check your connection.');
+            commentElement.textContent = originalText;
+        }
+    });
+}
+
+// Replace the redactReply function with this version
+async function redactReply(commentId, replyId) {
+    // Get the reply element and text
+    const replyElement = document.querySelector(`.comment[data-id="${replyId}"] .comment-text`);
+    if (!replyElement) return;
+    
+    const originalText = replyElement.textContent;
+    
+    // Replace the text with an editable textarea
+    const textareaContainer = document.createElement('div');
+    textareaContainer.className = 'redact-editor';
+    
+    const textarea = document.createElement('textarea');
+    textarea.className = 'redact-textarea';
+    textarea.value = originalText;
+    textareaContainer.appendChild(textarea);
+    
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'redact-buttons';
+    
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.className = 'redact-cancel-btn';
+    
+    const submitButton = document.createElement('button');
+    submitButton.textContent = 'Submit Redaction';
+    submitButton.className = 'redact-submit-btn';
+    
+    buttonsDiv.appendChild(cancelButton);
+    buttonsDiv.appendChild(submitButton);
+    textareaContainer.appendChild(buttonsDiv);
+    
+    // Replace the reply text with our editor
+    replyElement.innerHTML = '';
+    replyElement.appendChild(textareaContainer);
+    
+    // Focus the textarea
+    textarea.focus();
+    
+    // Cancel button restores original text
+    cancelButton.addEventListener('click', () => {
+        replyElement.textContent = originalText;
+    });
+    
+    // Submit button processes and saves redacted text
+    submitButton.addEventListener('click', async () => {
+        const editedText = textarea.value;
+        
+        // Process the edited text, replacing deleted parts with block characters
+        const redactedText = processRedactedText(originalText, editedText);
+        
+        try {
+            const response = await fetch(`/api/comments/${commentId}/replies/${replyId}/partial-redact`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    redactedText: redactedText
+                })
+            });
+            
+            if (response.ok) {
+                // Update the UI with the redacted text
+                replyElement.textContent = redactedText;
+                replyElement.classList.add('partially-redacted');
+            } else {
+                if (response.status === 401) {
+                    alert('Please log in to redact replies');
+                    window.location.href = '/login';
+                } else if (response.status === 403) {
+                    alert('Only moderators can redact replies');
+                } else {
+                    console.error('Failed to redact reply:', response.status);
+                    alert('Failed to redact reply. Please try again.');
+                    replyElement.textContent = originalText;
+                }
+            }
+        } catch (error) {
+            console.error('Error redacting reply:', error);
+            alert('Error redacting reply. Please check your connection.');
+            replyElement.textContent = originalText;
+        }
+    });
 }
 
 // Load on load
@@ -636,7 +1001,12 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch('/api/user')
         .then(response => response.json())
         .then(data => {
+            console.log("User data received:", data);
             if (data.username) {
+                // Store moderator status
+                isUserModerator = Boolean(data.is_moderator);
+                console.log("Moderator status set to:", isUserModerator);
+                
                 // Hide login button and show profile button
                 if (loginButton) loginButton.style.display = 'none';
                 if (profileButton) profileButton.style.display = 'inline-block';
@@ -646,7 +1016,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     mobileProfileButton.classList.add('logged-in');
                     mobileProfileButton.title = `Signed in as ${data.username}`;
                 }
-                  // Get full user details for the profile sidebar
+                
+                // If user is a moderator, display that in the profile
+                if (isUserModerator && profileUsername) {
+                    profileUsername.textContent = data.username + " (Moderator)";
+                    console.log("Updated profile username with moderator status");
+                }
+                
+                // Get full user details for the profile sidebar
                 fetch('/api/user-details')
                     .then(response => response.json())
                     .then(userData => {
