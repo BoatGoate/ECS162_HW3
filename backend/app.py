@@ -1,9 +1,13 @@
-from flask import Flask, redirect, url_for, session, jsonify, send_file, send_from_directory
+from flask import Flask, redirect, url_for, session, jsonify, send_file, send_from_directory, request
 from authlib.integrations.flask_client import OAuth
 from authlib.common.security import generate_token
 from dotenv import load_dotenv
 from flask_cors import CORS
+from pymongo import MongoClient
 import os
+import json
+from bson.objectid import ObjectId
+from datetime import datetime
 
 load_dotenv()
 
@@ -11,6 +15,11 @@ app = Flask(__name__)
 # Use a fixed secret key instead of randomly generating it on each restart
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev_secret_key_for_testing')
 CORS(app)  # Enable CORS for all routes
+
+# MongoDB Connection
+mongo_uri = os.getenv('MONGO_URI', 'mongodb://mongo:27017/')
+client = MongoClient(mongo_uri)
+db = client.nyt_comments_db  # Use a new database for our comments
 
 oauth = OAuth(app)
 
@@ -97,6 +106,146 @@ def serve_files(filename):
     frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend'))
     return send_from_directory(frontend_path, filename)
 
+# Comment-related API endpoints
+@app.route('/api/comments/<article_title>', methods=['GET'])
+def get_comments(article_title):
+    """Get all comments for a specific article"""
+    try:
+        comments = list(db.comments.find({'articleTitle': article_title}))
+        
+        # Convert ObjectId to string for JSON serialization
+        for comment in comments:
+            comment['_id'] = str(comment['_id'])
+            if 'replies' in comment:
+                for reply in comment['replies']:
+                    if '_id' in reply:
+                        reply['_id'] = str(reply['_id'])
+        
+        return jsonify(comments)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@app.route('/api/comments', methods=['POST'])
+def add_comment():
+    """Add a new comment to an article"""
+    try:
+        data = request.json
+        
+        # Check if user is logged in
+        user = session.get('user')
+        if not user:
+            return jsonify({"error": "You must be logged in to comment"}), 401
+        
+        # Create new comment
+        comment = {
+            'articleTitle': data['articleTitle'],
+            'username': user.get('username'),
+            'text': data['text'],
+            'timestamp': datetime.now().isoformat(),
+            'replies': []
+        }
+        
+        # Insert the comment into MongoDB
+        result = db.comments.insert_one(comment)
+        
+        # Update comment count for the article
+        db.article_stats.update_one(
+            {'articleTitle': data['articleTitle']},
+            {'$inc': {'commentCount': 1}},
+            upsert=True
+        )
+        
+        return jsonify({"id": str(result.inserted_id), "success": True}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/comments/<comment_id>/replies', methods=['POST'])
+def add_reply(comment_id):
+    """Add a reply to a specific comment"""
+    try:
+        data = request.json
+        
+        # Check if user is logged in
+        user = session.get('user')
+        if not user:
+            return jsonify({"error": "You must be logged in to reply"}), 401
+        
+        # Create new reply
+        reply = {
+            'username': user.get('username'),
+            'text': data['text'],
+            'timestamp': datetime.now().isoformat(),
+            '_id': ObjectId()
+        }
+          # Add reply to comment
+        result = db.comments.update_one(
+            {'_id': ObjectId(comment_id)},
+            {'$push': {'replies': reply}}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({"error": "Comment not found"}), 404
+            
+        # Get the article title from the parent comment
+        comment = db.comments.find_one({'_id': ObjectId(comment_id)})
+        if comment and 'articleTitle' in comment:
+            # Update comment count for the article (replies also count towards total)
+            db.article_stats.update_one(
+                {'articleTitle': comment['articleTitle']},
+                {'$inc': {'commentCount': 1}},
+                upsert=True
+            )
+        
+        return jsonify({"id": str(reply['_id']), "success": True}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/comment-count/<article_title>', methods=['GET'])
+def get_comment_count(article_title):
+    """Get the comment count for a specific article"""
+    try:
+        # Find stats for the article
+        stats = db.article_stats.find_one({'articleTitle': article_title})
+        count = stats['commentCount'] if stats else 0
+        
+        # If no stats record exists, also check the actual comment count
+        if not stats:
+            count = db.comments.count_documents({'articleTitle': article_title})
+            
+        return jsonify({"count": count})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+# Removed duplicate endpoint for '/api/comments' POST method
+# This endpoint was causing duplicate comment creation
+
+@app.route('/api/all-comments', methods=['GET'])
+def get_all_comments():
+    comments = list(db.comments.find({}, {'_id': 1, 'text': 1, 'username': 1, 'created_at': 1}))
+    for comment in comments:
+        comment['_id'] = str(comment['_id'])
+    return jsonify(comments), 200
+
+@app.route('/api/comments/<comment_id>', methods=['DELETE'])
+def delete_comment(comment_id):
+    result = db.comments.delete_one({'_id': ObjectId(comment_id)})
+    if result.deleted_count == 1:
+        return jsonify({'message': 'Comment deleted'}), 200
+    return jsonify({'error': 'Comment not found'}), 404
+
+@app.route('/api/comments/<comment_id>', methods=['PUT'])
+def update_comment(comment_id):
+    data = request.json
+    if not data or 'comment' not in data:
+        return jsonify({'error': 'Invalid data'}), 400
+
+    result = db.comments.update_one(
+        {'_id': ObjectId(comment_id)},
+        {'$set': {'text': data['comment'], 'updated_at': datetime.utcnow()}}
+    )
+    if result.matched_count == 1:
+        return jsonify({'message': 'Comment updated'}), 200
+    return jsonify({'error': 'Comment not found'}), 404
+
+# docker-compose -f docker-compose.dev.yml down -v
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8000)

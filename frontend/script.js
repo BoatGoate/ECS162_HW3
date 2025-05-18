@@ -36,6 +36,12 @@ function estimateReadTime(wordCount) {
     return `${minutes} MIN READ`;
 }
 
+function generateCommentNumber() {
+    // Generate a random number between 100 and 200
+    const randomNumber = Math.floor(Math.random() * 100) + 100;
+    return randomNumber;
+}
+
 // Fetch API key from the backend
 async function fetchApiKey() {
     try {
@@ -153,7 +159,31 @@ function displayArticles(articles, clearExisting = false) {
         const readTime = document.createElement('p');
         readTime.className = "read-time";
         readTime.textContent = estimateReadTime(article.word_count || 500); // Default to 500 if word_count is not available
-        articleDiv.appendChild(readTime);
+
+        // Add comment tag
+        const commentTag = document.createElement('p');
+        commentTag.className = "comment-tag";
+        
+        // Add comment icon and number
+        const commentIcon = document.createElement('i');
+        commentIcon.className = "material-icons";
+        commentIcon.textContent = "comment";
+        commentTag.appendChild(commentIcon);
+        
+        const commentNumber = generateCommentNumber();
+        commentTag.appendChild(document.createTextNode(` ${commentNumber}`));
+        
+        // Create a wrapper div for read time and comment tag
+        const articleFooter = document.createElement('div');
+        articleFooter.className = "article-footer";
+        articleFooter.appendChild(readTime);
+        articleFooter.appendChild(commentTag);
+        articleDiv.appendChild(articleFooter);
+        
+        // Store article data for comment sidebar
+        commentTag.addEventListener('click', () => {
+            openCommentSidebar(article.headline.main, commentNumber);
+        });
         
         // Add article to grid
         gridContainer.appendChild(articleDiv);
@@ -233,6 +263,338 @@ function setupProfileSidebar() {
     });
 }
 
+// Comment sidebar functionality
+let commentsData = {}; // Store comments for each article
+
+// Open comment sidebar for a specific article
+async function openCommentSidebar(articleTitle, commentCount) {
+    const commentSidebar = document.getElementById('comment-sidebar');
+    const articleTitleElem = document.getElementById('comment-article-title');
+    const commentCountElem = document.getElementById('comment-count');
+    const commentsContainer = document.getElementById('comments-container');
+    
+    // Set article title
+    articleTitleElem.textContent = articleTitle;
+    
+    try {
+        // Try to get comment count from server
+        const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(articleTitle)}`);
+        if (countResponse.ok) {
+            const data = await countResponse.json();
+            commentCountElem.textContent = data.count;
+        } else {
+            // Fall back to local count if server fails
+            commentCountElem.textContent = commentCount;
+        }
+    } catch (error) {
+        console.error('Error getting comment count:', error);
+        commentCountElem.textContent = commentCount;
+    }
+    
+    // Show the sidebar
+    commentSidebar.style.display = 'flex';
+    
+    // Load comments from the server
+    await fetchComments(articleTitle);
+    
+    // Setup event handlers
+    setupCommentEventHandlers(articleTitle);
+}
+
+// Fetch comments from server
+async function fetchComments(articleTitle) {
+    try {
+        const response = await fetch(`/api/comments/${encodeURIComponent(articleTitle)}`);
+        
+        if (response.ok) {
+            const comments = await response.json();
+            commentsData[articleTitle] = comments;
+            displayComments(articleTitle);
+        } else {
+            console.error('Failed to fetch comments:', response.status);
+            // Display empty comments list if fetch fails
+            commentsData[articleTitle] = [];
+            displayComments(articleTitle);
+        }
+    } catch (error) {
+        console.error('Error fetching comments:', error);
+        commentsData[articleTitle] = [];
+        displayComments(articleTitle);
+    }
+}
+
+// Display comments for a specific article
+function displayComments(articleTitle) {
+    const commentsContainer = document.getElementById('comments-container');
+    
+    // Clear existing comments
+    commentsContainer.innerHTML = '';
+    
+    // Get comments for this article
+    const articleComments = commentsData[articleTitle] || [];
+    
+    // Create and append comment elements
+    articleComments.forEach(comment => {
+        const commentElement = createCommentElement(comment);
+        commentsContainer.appendChild(commentElement);
+    });
+}
+
+// Create a comment element
+function createCommentElement(comment, isReply = false) {
+    const commentDiv = document.createElement('div');
+    commentDiv.className = 'comment';
+    commentDiv.dataset.id = comment._id || comment.id; // MongoDB uses _id
+    
+    // Comment author info
+    const authorDiv = document.createElement('div');
+    authorDiv.className = 'comment-author';
+    
+    const avatarDiv = document.createElement('div');
+    avatarDiv.className = 'comment-avatar';
+    
+    const avatarIcon = document.createElement('i');
+    avatarIcon.className = 'material-icons';
+    avatarIcon.textContent = 'person';
+    avatarDiv.appendChild(avatarIcon);
+    
+    const usernameSpan = document.createElement('span');
+    usernameSpan.className = 'comment-username';
+    usernameSpan.textContent = comment.username;
+    
+    authorDiv.appendChild(avatarDiv);
+    authorDiv.appendChild(usernameSpan);
+    commentDiv.appendChild(authorDiv);
+    
+    // Comment text
+    const commentText = document.createElement('p');
+    commentText.className = 'comment-text';
+    commentText.textContent = comment.text;
+    commentDiv.appendChild(commentText);
+      // Comment actions
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'comment-actions';
+    
+    const replyButton = document.createElement('button');
+    replyButton.className = 'reply-button';
+    replyButton.textContent = 'Reply';
+    replyButton.addEventListener('click', () => {
+        toggleReplyForm(comment._id || comment.id); // MongoDB uses _id
+    });
+    
+    actionsDiv.appendChild(replyButton);
+    commentDiv.appendChild(actionsDiv);
+      // Reply form (initially hidden)
+    const replyFormDiv = document.createElement('div');
+    replyFormDiv.className = 'reply-input-container';
+    const commentId = comment._id || comment.id;
+    replyFormDiv.id = `reply-form-${commentId}`;
+    
+    const replyTextarea = document.createElement('textarea');
+    replyTextarea.className = 'reply-textarea';
+    replyTextarea.placeholder = 'Write a reply...';
+    
+    const buttonDiv = document.createElement('div');
+    buttonDiv.className = 'reply-buttons';
+    
+    const cancelButton = document.createElement('button');
+    cancelButton.className = 'comment-cancel';
+    cancelButton.textContent = 'Cancel';
+    cancelButton.addEventListener('click', () => {
+        toggleReplyForm(commentId);
+    });
+    
+    const submitButton = document.createElement('button');
+    submitButton.className = 'comment-submit';
+    submitButton.textContent = 'Reply';
+    submitButton.addEventListener('click', () => {
+        submitReply(commentId, replyTextarea.value);
+    });
+    
+    buttonDiv.appendChild(cancelButton);
+    buttonDiv.appendChild(submitButton);
+    
+    replyFormDiv.appendChild(replyTextarea);
+    replyFormDiv.appendChild(buttonDiv);
+    commentDiv.appendChild(replyFormDiv);
+    
+    // Add replies if they exist
+    if (comment.replies && comment.replies.length > 0) {
+        const repliesDiv = document.createElement('div');
+        repliesDiv.className = 'replies';
+        
+        comment.replies.forEach(reply => {
+            repliesDiv.appendChild(createCommentElement(reply, true));
+        });
+        
+        commentDiv.appendChild(repliesDiv);
+    }
+    
+    return commentDiv;
+}
+
+// Toggle reply form visibility
+function toggleReplyForm(commentId) {
+    const replyForm = document.getElementById(`reply-form-${commentId}`);
+    
+    if (replyForm.style.display === 'block') {
+        replyForm.style.display = 'none';
+    } else {
+        replyForm.style.display = 'block';
+    }
+}
+
+// Submit a reply to a comment
+async function submitReply(parentId, text) {
+    if (!text.trim()) return;
+    
+    const articleTitle = document.getElementById('comment-article-title').textContent;
+    
+    try {
+        const response = await fetch(`/api/comments/${parentId}/replies`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                text: text
+            })
+        });
+          if (response.ok) {
+            const result = await response.json();
+            console.log('Reply added successfully:', result);
+            
+            // Refresh comments to show the new reply
+            await fetchComments(articleTitle);
+            
+            // Update comment count by fetching from the server
+            try {
+                const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(articleTitle)}`);
+                if (countResponse.ok) {
+                    const data = await countResponse.json();
+                    const commentCountElem = document.getElementById('comment-count');
+                    commentCountElem.textContent = data.count;
+                }
+            } catch (error) {
+                console.error('Error updating comment count:', error);
+            }
+            
+            // Hide the reply form
+            const replyForm = document.getElementById(`reply-form-${parentId}`);
+            if (replyForm) {
+                replyForm.style.display = 'none';
+            }
+        } else {
+            if (response.status === 401) {
+                alert('Please log in to add a reply');
+                window.location.href = '/login';
+            } else {
+                console.error('Failed to submit reply:', response.status);
+                alert('Failed to add reply. Please try again.');
+            }
+        }
+    } catch (error) {
+        console.error('Error submitting reply:', error);
+        alert('Error adding reply. Please check your connection.');
+    }
+}
+
+// Setup event handlers for the comment sidebar
+function setupCommentEventHandlers(articleTitle) {
+    const commentSidebar = document.getElementById('comment-sidebar');
+    const closeButton = commentSidebar.querySelector('.comment-close-button');
+    const textarea = document.getElementById('comment-textarea');
+    const buttonsDiv = document.getElementById('comment-buttons');
+    const submitButton = document.getElementById('comment-submit');
+    const cancelButton = document.getElementById('comment-cancel');
+    
+    // Close button event
+    closeButton.addEventListener('click', () => {
+        commentSidebar.style.display = 'none';
+    });
+    
+    // Close sidebar when clicking outside
+    window.addEventListener('click', (event) => {
+        if (event.target === commentSidebar) {
+            commentSidebar.style.display = 'none';
+        }
+    });
+    
+    // Show/hide buttons based on textarea content
+    textarea.addEventListener('input', () => {
+        if (textarea.value.trim()) {
+            buttonsDiv.style.display = 'flex';
+        } else {
+            buttonsDiv.style.display = 'none';
+        }
+    });
+    
+    // Submit comment event
+    submitButton.addEventListener('click', () => {
+        const commentText = textarea.value.trim();
+        
+        if (commentText) {
+            submitComment(articleTitle, commentText);
+            textarea.value = '';
+            buttonsDiv.style.display = 'none';
+        }
+    });
+    
+    // Cancel comment event
+    cancelButton.addEventListener('click', () => {
+        textarea.value = '';
+        buttonsDiv.style.display = 'none';
+    });
+}
+
+// Submit a new comment for an article
+async function submitComment(articleTitle, text) {
+    if (!text.trim()) return;
+    
+    try {
+        const response = await fetch('/api/comments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                articleTitle: articleTitle,
+                text: text
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('Comment added successfully:', result);
+              // Refresh comments - this will update the comment list
+            await fetchComments(articleTitle);
+            
+            // Update comment count by fetching from the server
+            try {
+                const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(articleTitle)}`);
+                if (countResponse.ok) {
+                    const data = await countResponse.json();
+                    const commentCountElem = document.getElementById('comment-count');
+                    commentCountElem.textContent = data.count;
+                }
+            } catch (error) {
+                console.error('Error updating comment count:', error);
+            }
+        } else {
+            if (response.status === 401) {
+                alert('Please log in to comment');
+                window.location.href = '/login';
+            } else {
+                console.error('Failed to submit comment:', response.status);
+                alert('Failed to add comment. Please try again.');
+            }
+        }
+    } catch (error) {
+        console.error('Error submitting comment:', error);
+        alert('Error adding comment. Please check your connection.');
+    }
+}
+
 // Load on load
 document.addEventListener('DOMContentLoaded', () => {
     fetchNYTData();
@@ -240,6 +602,26 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Always setup profile sidebar to handle mobile button clicks
     setupProfileSidebar();
+    
+    // Setup comment sidebar close functionality
+    const commentSidebar = document.getElementById('comment-sidebar');
+    const commentCloseButton = document.querySelector('.comment-close-button');
+    
+    commentCloseButton.addEventListener('click', () => {
+        commentSidebar.style.display = 'none';
+    });
+    
+    // Add input listener to comment textarea
+    const commentTextarea = document.getElementById('comment-textarea');
+    const commentButtons = document.getElementById('comment-buttons');
+    
+    commentTextarea.addEventListener('input', () => {
+        if (commentTextarea.value.trim()) {
+            commentButtons.style.display = 'flex';
+        } else {
+            commentButtons.style.display = 'none';
+        }
+    });
     
     // User info fetch (to check if logged in)
     const loginButton = document.getElementById('login-button');
@@ -293,6 +675,9 @@ if (typeof module !== 'undefined' && module.exports) {
     fetchApiKey,
     fetchNYTData,
     displayArticles,
-    checkScroll
+    checkScroll,
+    openCommentSidebar,
+    setupCommentEventHandlers,
+    submitComment
   };
 }

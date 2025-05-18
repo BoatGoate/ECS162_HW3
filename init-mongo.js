@@ -1,3 +1,4 @@
+// Initialize the user database
 db = db.getSiblingDB('mydatabase');  // Switch to the 'mydatabase' database
 
 // Check if the users collection exists, and if not, insert the static user
@@ -8,3 +9,12 @@ db.users.find().count() === 0 && db.users.insertOne({
     username: 'alice',
     userID: '123'
 });
+
+// Initialize the comments database
+db = db.getSiblingDB('nyt_comments_db');  // Switch to the 'nyt_comments_db' database
+
+// Create comments collection
+db.createCollection('comments');
+
+// Create article_stats collection for tracking comment counts
+db.createCollection('article_stats');

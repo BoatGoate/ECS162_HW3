@@ -4,6 +4,7 @@
         <title>The New York Times</title>
         <link href="styles.css" rel="stylesheet">
         <link href="profile-sidebar.css" rel="stylesheet">
+        <link href="comment-sidebar.css" rel="stylesheet">
         <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
         <!-- Found defer keyword method on Reddit -->
         <script src="script.js" defer></script>
@@ -199,6 +200,32 @@
                     <div class="profile-info-item">
                         <span class="profile-info-label">Email</span>
                         <span class="profile-info-value" id="profile-email">user@example.com</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Comment Sidebar -->
+        <div class="comment-sidebar" id="comment-sidebar">
+            <div class="comment-header">
+                <h3 class="comment-article-title" id="comment-article-title">Article Title</h3>
+                <button class="comment-close-button"><i class="material-icons">close</i></button>
+            </div>
+            
+            <h4 class="comment-count-header">Comments <span id="comment-count">0</span></h4>
+            
+            <div class="comment-input-container">
+                <textarea class="comment-textarea" id="comment-textarea" placeholder="Write a comment..."></textarea>
+                <div class="comment-buttons" id="comment-buttons">
+                    <button class="comment-cancel" id="comment-cancel">Cancel</button>
+                    <button class="comment-submit" id="comment-submit">Submit</button>
+                </div>
+            </div>
+            
+            <div class="comments-container" id="comments-container">
+                <!-- Comments will be inserted here dynamically -->
+            </div>
+        </div>
                     </div>
                 </div>
                 <hr class="profile-divider">
