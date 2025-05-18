@@ -756,8 +756,10 @@ async function submitComment(articleTitle, text) {
         });
         
         if (response.ok) {
-            const result = await response.json();            console.log('Comment added successfully:', result);
-              // Refresh comments - this will update the comment list
+            const result = await response.json();
+            console.log('Comment added successfully:', result);
+            
+            // Refresh comments - this will update the comment list
             const currentArticleTitle = document.getElementById('comment-article-title').textContent;
             await fetchComments(currentArticleTitle);
             
@@ -805,8 +807,8 @@ async function deleteComment(commentId) {
             // Update the UI to show the removed message
             const commentElement = document.querySelector(`.comment[data-id="${commentId}"] .comment-text`);
             if (commentElement) {
-                commentElement.textContent = "[Comment removed by a moderator]";
-                commentElement.style.color = 'dark gray';
+                commentElement.textContent = "Comment removed by a moderator";
+                commentElement.style.color = 'gray';
                 commentElement.classList.add('removed');
             }
             
@@ -855,8 +857,8 @@ async function deleteReply(commentId, replyId) {
             // Update the UI to show the removed message
             const replyElement = document.querySelector(`.comment[data-id="${replyId}"] .comment-text`);
             if (replyElement) {
-                replyElement.textContent = "[Comment removed by a moderator]";  
-                replyElement.style.color = 'dark gray';
+                replyElement.textContent = "Comment removed by a moderator";  
+                replyElement.style.color = 'gray';
                 replyElement.classList.add('removed');
             }
         } else {

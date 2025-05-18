@@ -154,6 +154,8 @@
     flex-direction: row;
     align-items: center;
     margin-top: 5px;
+    padding-top: 5px;
+    padding-left: 40px;
 }
 
 .reply-button {
