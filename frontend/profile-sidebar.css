@@ -1,0 +1,128 @@
+/* User Profile Sidebar Styling */
+.profile-sidebar {
+    display: none;
+    flex-direction: column;
+    position: fixed;
+    background-color: white;
+    height: 100%;
+    width: 350px;
+    top: 0;
+    right: 0;
+    z-index: 1000;
+    padding: 20px;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.2);
+}
+
+.profile-header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.profile-title {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.profile-close-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.profile-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    background-color: rgba(11, 84, 127, 0.753);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto 20px;
+}
+
+.profile-avatar i {
+    font-size: 50px;
+    color: white;
+}
+
+.profile-welcome {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.profile-welcome h4 {
+    font-family: Georgia, serif;
+    font-size: 18px;
+    margin: 0 0 5px 0;
+}
+
+.profile-welcome p {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    color: #666;
+    margin: 0;
+}
+
+.profile-divider {
+    border: 0;
+    height: 1px;
+    background-color: #e0e0e0;
+    margin: 15px 0;
+}
+
+.profile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.profile-info-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.profile-info-label {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.profile-info-value {
+    font-family: Georgia, serif;
+    font-size: 16px;
+}
+
+.profile-logout {
+    margin-top: 30px;
+    padding: 10px;
+    background-color: rgba(11, 84, 127, 0.753);
+    color: white;
+    border: none;
+    border-radius: 3px;
+    font-weight: bold;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.profile-logout:hover {
+    background-color: rgba(10, 70, 104, 0.863);
+}
+
+@media screen and (max-width: 480px) {
+    .profile-sidebar {
+        width: 100%;
+    }
+}

@@ -181,19 +181,107 @@ function checkScroll() {
     }
 }
 
+// Handle profile sidebar open/close
+function setupProfileSidebar() {
+    const profileSidebar = document.getElementById('profile-sidebar');
+    const profileButton = document.getElementById('profile-button');
+    const mobileProfileButton = document.getElementById('mobile-profile-button');
+    const closeButton = document.querySelector('.profile-close-button');
+    
+    // Open sidebar when profile button is clicked
+    if (profileButton) {
+        profileButton.addEventListener('click', () => {
+            profileSidebar.style.display = 'flex';
+        });
+    }
+    
+    // Open sidebar when mobile profile button is clicked
+    if (mobileProfileButton) {
+        mobileProfileButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fetch('/api/user')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.username) {
+                        // User is logged in, show profile sidebar
+                        profileSidebar.style.display = 'flex';
+                    } else {
+                        // User is not logged in, redirect to login page
+                        window.location.href = '/login';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking login status:', error);
+                    window.location.href = '/login';
+                });
+        });
+    }
+    
+    // Close sidebar when close button is clicked
+    if (closeButton) {
+        closeButton.addEventListener('click', () => {
+            profileSidebar.style.display = 'none';
+        });
+    }
+    
+    // Close sidebar when clicking outside
+    window.addEventListener('click', (event) => {
+        if (event.target == profileSidebar) {
+            profileSidebar.style.display = 'none';
+        }
+    });
+}
+
 // Load on load
 document.addEventListener('DOMContentLoaded', () => {
     fetchNYTData();
     window.addEventListener('scroll', checkScroll);
     
+    // Always setup profile sidebar to handle mobile button clicks
+    setupProfileSidebar();
+    
     // User info fetch (to check if logged in)
     const loginButton = document.getElementById('login-button');
+    const profileButton = document.getElementById('profile-button');
+    const profileUsername = document.getElementById('profile-username');
+    const profileEmail = document.getElementById('profile-email');
+    const mobileProfileButton = document.getElementById('mobile-profile-button');
+    
     fetch('/api/user')
         .then(response => response.json())
         .then(data => {
             if (data.username) {
-                loginButton.textContent = `Signed in as ${data.username}`;
-                loginButton.onclick = null; // Disable redirect to /login
+                // Hide login button and show profile button
+                if (loginButton) loginButton.style.display = 'none';
+                if (profileButton) profileButton.style.display = 'inline-block';
+                
+                // Update mobile profile button appearance
+                if (mobileProfileButton) {
+                    mobileProfileButton.classList.add('logged-in');
+                    mobileProfileButton.title = `Signed in as ${data.username}`;
+                }
+                  // Get full user details for the profile sidebar
+                fetch('/api/user-details')
+                    .then(response => response.json())
+                    .then(userData => {
+                        if (profileUsername) {
+                            profileUsername.textContent = userData.username || 'User';
+                        }
+                        
+                        if (profileEmail) {
+                            if (userData.email) {
+                                profileEmail.textContent = userData.email;
+                            } else {
+                                profileEmail.textContent = 'No email provided';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        if (profileUsername) profileUsername.textContent = data.username || 'User';
+                        if (profileEmail) profileEmail.textContent = 'Email not available';
+                        console.error('Error fetching user details:', error);
+                    });
             }
         })
         .catch(error => console.error('Error fetching user info:', error));

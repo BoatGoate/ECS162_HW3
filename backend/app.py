@@ -8,14 +8,13 @@ import os
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+# Use a fixed secret key instead of randomly generating it on each restart
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev_secret_key_for_testing')
 CORS(app)  # Enable CORS for all routes
-
 
 oauth = OAuth(app)
 
-nonce = generate_token()
-
+# Don't generate the nonce here, we'll do it in the login route
 
 oauth.register(
     name=os.getenv('OIDC_CLIENT_NAME'),
@@ -38,6 +37,8 @@ def serve_index():
 
 @app.route('/login')
 def login():
+    # Generate a new nonce for each login attempt
+    nonce = generate_token()
     session['nonce'] = nonce
     redirect_uri = 'http://localhost:8000/authorize'
     return oauth.flask_app.authorize_redirect(redirect_uri, nonce=nonce)
@@ -74,6 +75,16 @@ def get_user_info():
     if user:
         return jsonify({"username": user.get("username")})
     return jsonify({"username": None})
+
+@app.route('/api/user-details')
+def get_user_details():
+    user = session.get('user')
+    if user:
+        return jsonify({
+            "username": user.get("username"),
+            "email": user.get("email")
+        })
+    return jsonify({"username": None, "email": None})
 
 @app.route('/app')
 def serve_app():
