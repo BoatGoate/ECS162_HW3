@@ -254,7 +254,6 @@ def add_nested_reply(comment_id, reply_id):
             'parent_reply_id': reply_id  # Reference to the parent reply
         }
         
-        # Find the parent comment
         comment = db.comments.find_one({'_id': ObjectId(comment_id)})
         if not comment:
             return jsonify({"error": "Parent comment not found"}), 404
@@ -371,7 +370,6 @@ def delete_reply(comment_id, reply_id):
     # DEBUG
     print(f"DEBUG - Delete reply request from: {email}, is_moderator: {is_moderator}")
     
-    # Check if user is a moderator
     if not is_moderator:
         return jsonify({"error": "Only moderators can delete replies"}), 403
         
@@ -380,7 +378,6 @@ def delete_reply(comment_id, reply_id):
     if not comment:
         return jsonify({'error': 'Parent comment not found'}), 404
     
-    # Mark the reply as deleted instead of actually removing it
     result = db.comments.update_one(
         {'_id': ObjectId(comment_id), 'replies._id': ObjectId(reply_id)},
         {'$set': {
