@@ -890,7 +890,6 @@ async function redactComment(commentId) {
     
     const originalText = commentElement.textContent;
     
-    // Replace the text with an editable textarea
     const textareaContainer = document.createElement('div');
     textareaContainer.className = 'redact-editor';
     
