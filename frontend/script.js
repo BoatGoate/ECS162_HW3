@@ -28,7 +28,6 @@ let isFetching = false;
 let hasMoreArticles = true;
 const MAX_REQUESTS = 3; // Limit to 3 API requests total (we want to show the footer too)
 
-// Add a global variable to track if the user is a moderator
 let isUserModerator = false;
 
 // Estimate reading time based on word count
@@ -93,10 +92,8 @@ async function displayArticles(articles, clearExisting = false) {
     for (let i = 0; i < articles.length; i++) {
         const article = articles[i];
         
-        // Create article container
         const articleDiv = document.createElement('div');
-        
-        // Get the multimedia URL or use a placeholder if not available
+
         let hasImage = false;
         let imgUrl = 'assets/logo.png'; // Default placeholder
         
@@ -130,16 +127,13 @@ async function displayArticles(articles, clearExisting = false) {
         subtitle.textContent = article.abstract || article.snippet || '';
         articleDiv.appendChild(subtitle);
         
-        // Add reading time
         const readTime = document.createElement('p');
         readTime.className = "read-time";
         readTime.textContent = estimateReadTime(article.word_count || 500); // Default to 500 if word_count is not available
 
-        // Add comment tag
         const commentTag = document.createElement('p');
         commentTag.className = "comment-tag";
         
-        // Add comment icon and number
         const commentIcon = document.createElement('i');
         commentIcon.className = "material-icons";
         commentIcon.textContent = "comment";
@@ -149,7 +143,6 @@ async function displayArticles(articles, clearExisting = false) {
         let commentNumber = 0;
 
         try {
-            // Use article.headline.main instead of undefined currentArticleTitle
             const countResponse = await fetch(`/api/comment-count/${encodeURIComponent(article.headline.main)}`);
             if (countResponse.ok) {
                 const data = await countResponse.json();
@@ -285,10 +278,8 @@ async function openCommentSidebar(articleTitle, commentCount) {
     // Show the sidebar
     commentSidebar.style.display = 'flex';
     
-    // Load comments from the server
     await fetchComments(articleTitle);
-    
-    // Setup event handlers
+
     setupCommentEventHandlers(articleTitle);
 }
 
@@ -319,10 +310,8 @@ async function fetchComments(articleTitle) {
 function displayComments(articleTitle) {
     const commentsContainer = document.getElementById('comments-container');
     
-    // Clear existing comments
     commentsContainer.innerHTML = '';
-    
-    // Get comments for this article
+
     const articleComments = commentsData[articleTitle] || [];
     
     // Create and append comment elements
@@ -360,7 +349,7 @@ function createCommentElement(comment, isReply = false, parentId = null) {
     authorDiv.appendChild(usernameSpan);
     commentDiv.appendChild(authorDiv);
     
-    // Comment text
+    // Comment date
     const commentText = document.createElement('p');
     commentText.className = 'comment-text';
     commentText.textContent = comment.text;
@@ -406,7 +395,7 @@ function createCommentElement(comment, isReply = false, parentId = null) {
         actionsDiv.appendChild(redactButton);
     }
     
-    // 3. Add delete button for moderators (third position - far right)
+    // 3. Add delete button for moderators
     if (isUserModerator) {
         const deleteButton = document.createElement('button');
         deleteButton.className = 'delete-button';
@@ -461,7 +450,7 @@ function createCommentElement(comment, isReply = false, parentId = null) {
             // Submit as a nested reply
             submitNestedReply(parentCommentId, commentId, replyTextarea.value);
         } else {
-            // Submit as a regular reply
+            // submit as a regular reply
             submitReply(commentId, replyTextarea.value);
         }
     });
@@ -896,7 +885,6 @@ async function redactComment(commentId) {
     commentElement.innerHTML = '';
     commentElement.appendChild(textareaContainer);
     
-    // Focus the textarea
     textarea.focus();
     
     // Cancel button restores original text
@@ -980,8 +968,7 @@ async function redactReply(commentId, replyId) {
     // Replace the reply text with our editor
     replyElement.innerHTML = '';
     replyElement.appendChild(textareaContainer);
-    
-    // Focus the textarea
+
     textarea.focus();
     
     // Cancel button restores original text
@@ -1084,8 +1071,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     mobileProfileButton.classList.add('logged-in');
                     mobileProfileButton.title = `Signed in as ${data.username}`;
                 }
-                
-                // If user is a moderator, display that in the profile
+
                 if (isUserModerator && profileUsername) {
                     profileUsername.textContent = data.username + " (Moderator)";
                     console.log("Updated profile username with moderator status");
