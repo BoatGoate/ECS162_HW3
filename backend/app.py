@@ -90,12 +90,8 @@ def logout():
     session.clear()
     return redirect('/')
 
-@app.route('/api/key')
-def get_api_key():
-    nyt_api_key = os.getenv('NYT_API_KEY')
-    if not nyt_api_key:
-        return jsonify({"error": "API key not found"}), 500
-    return jsonify({"key": nyt_api_key})
+# We've replaced the /api/key endpoint with /api/articles
+# to handle NYT API requests on the server side for better security
 
 @app.route('/api/user')
 def get_user_info():
@@ -518,6 +514,31 @@ def partial_redact_reply(comment_id, reply_id):
     if result.matched_count == 1:
         return jsonify({'message': 'Reply partially redacted successfully'}), 200
     return jsonify({'error': 'Reply not found'}), 404
+
+@app.route('/api/articles', methods=['GET'])
+def get_articles():
+    """Get articles from NYT API"""
+    try:
+        # Get query parameters
+        page = request.args.get('page', '0')
+        query = request.args.get('q', 'davis+sacramento')  # Default query is "davis+sacramento"
+        
+        # Get API key from environment variable
+        nyt_api_key = os.getenv('NYT_API_KEY')
+        if not nyt_api_key:
+            return jsonify({"error": "API key not found"}), 500
+        
+        # Make request to NYT API
+        import requests
+        url = f"https://api.nytimes.com/svc/search/v2/articlesearch.json?q={query}&page={page}&api-key={nyt_api_key}"
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            return jsonify(response.json()), 200
+        else:
+            return jsonify({"error": f"NYT API returned status code {response.status_code}"}), response.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # docker-compose -f docker-compose.dev.yml down -v
 if __name__ == '__main__':

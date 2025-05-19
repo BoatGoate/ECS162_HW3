@@ -39,22 +39,7 @@ function estimateReadTime(wordCount) {
     return `${minutes} MIN READ`;
 }
 
-// Fetch API key from the backend
-async function fetchApiKey() {
-    try {
-        const response = await fetch('/api/key');
-        if (response.ok) {
-            const data = await response.json();
-            return data.key;
-        } else {
-            console.error('Failed to fetch API key:', response.status);
-            return null;
-        }
-    } catch (error) {
-        console.error('Error fetching API key:', error);
-        return null;
-    }
-}
+// API key is now managed securely on the server side
 
 // Fetch NYT data and display it
 // About: https://developer.nytimes.com/docs/articlesearch-product/1/overview
@@ -70,20 +55,13 @@ async function fetchNYTData(page = 0) { // page is passed to api as well
     isFetching = true;
     
     try {
-        const apiKey = await fetchApiKey();
-        if (!apiKey) {
-            console.error('No API key available');
-            isFetching = false;
-            return;
-        }
-        
-        // API call to NYT with query and page number
-        const response = await fetch(`https://api.nytimes.com/svc/search/v2/articlesearch.json?q=${query}&page=${page}&api-key=${apiKey}`);
+        // API call to our backend, which will fetch from NYT
+        const response = await fetch(`/api/articles?q=${query}&page=${page}`);
         if (response.ok) {
             const data = await response.json();
             
             // Check if we received articles
-            if (data.response.docs && data.response.docs.length > 0) {
+            if (data.response && data.response.docs && data.response.docs.length > 0) {
                 displayArticles(data.response.docs, page === 0);
                 currPage = page;
             } else {
@@ -1142,7 +1120,6 @@ document.addEventListener('DOMContentLoaded', () => {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     estimateReadTime,
-    fetchApiKey,
     fetchNYTData,
     displayArticles,
     checkScroll,
