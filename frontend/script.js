@@ -39,12 +39,6 @@ function estimateReadTime(wordCount) {
     return `${minutes} MIN READ`;
 }
 
-function generateCommentNumber() {
-    // Generate a random number between 100 and 200
-    const randomNumber = Math.floor(Math.random() * 100) + 100;
-    return randomNumber;
-}
-
 // Fetch API key from the backend
 async function fetchApiKey() {
     try {
@@ -696,16 +690,13 @@ function setupCommentEventHandlers(articleTitle) {
     const submitButton = document.getElementById('comment-submit');
     const cancelButton = document.getElementById('comment-cancel');
     
+    if (!commentSidebar || !closeButton || !textarea || !buttonsDiv || !submitButton || !cancelButton) {
+        return { success: false, reason: 'missing_elements' };
+    }
+    
     // Close button event
     closeButton.addEventListener('click', () => {
         commentSidebar.style.display = 'none';
-    });
-    
-    // Close sidebar when clicking outside
-    window.addEventListener('click', (event) => {
-        if (event.target === commentSidebar) {
-            commentSidebar.style.display = 'none';
-        }
     });
     
     // Show/hide buttons based on textarea content
@@ -733,6 +724,8 @@ function setupCommentEventHandlers(articleTitle) {
         textarea.value = '';
         buttonsDiv.style.display = 'none';
     });
+    
+    return { success: true, handlers: ['close', 'input', 'submit', 'cancel'] };
 }
 
 // Submit a new comment for an article
@@ -756,7 +749,8 @@ async function submitComment(articleTitle, text) {
         });
         
         if (response.ok) {
-            const result = await response.json();            console.log('Comment added successfully:', result);
+            const result = await response.json();
+            console.log('Comment added successfully:', result);
               // Refresh comments - this will update the comment list
             const currentArticleTitle = document.getElementById('comment-article-title').textContent;
             await fetchComments(currentArticleTitle);
@@ -790,7 +784,7 @@ async function submitComment(articleTitle, text) {
 // Delete a comment
 async function deleteComment(commentId) {
     if (!confirm('Are you sure you want to remove this comment?')) {
-        return;
+        return { success: false, reason: 'cancelled' };
     }
     
     try {
@@ -828,12 +822,23 @@ async function deleteComment(commentId) {
             } catch (error) {
                 console.error('Error updating comment count:', error);
             }
+            
+            return { success: true };
         } else {
-            // Error handling code...
+            return { 
+                success: false, 
+                status: response.status,
+                reason: 'api_error' 
+            };
         }
     } catch (error) {
         console.error('Error removing comment:', error);
         alert('Error removing comment. Please check your connection.');
+        return { 
+            success: false, 
+            reason: 'network_error',
+            error: error.message 
+        };
     }
 }
 
@@ -1143,6 +1148,15 @@ if (typeof module !== 'undefined' && module.exports) {
     checkScroll,
     openCommentSidebar,
     setupCommentEventHandlers,
-    submitComment
+    submitComment,
+    setupProfileSidebar,
+    processRedactedText,
+    toggleReplyForm,
+    deleteComment,
+    redactComment,
+    deleteReply,
+    redactReply,
+    createCommentElement,
+    displayComments
   };
 }
